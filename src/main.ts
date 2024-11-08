@@ -1,3 +1,4 @@
+// Add the button
 let btn = document.createElement("button");
 btn.innerHTML = "Click me!";
 btn.addEventListener("click", (ev) => {
