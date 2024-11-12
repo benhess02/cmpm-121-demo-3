@@ -61,7 +61,7 @@ function spawnCache(x: number, y: number) {
     const collectBtn = document.createElement("button");
     collectBtn.innerHTML = "Collect";
     collectBtn.addEventListener("click", () => {
-      if(pointValue > 0) {
+      if (pointValue > 0) {
         pointValue--;
         popupDiv.querySelector<HTMLSpanElement>("#value")!.innerHTML =
           pointValue.toString();
@@ -74,12 +74,12 @@ function spawnCache(x: number, y: number) {
     const despositBtn = document.createElement("button");
     despositBtn.innerHTML = "Deposit";
     despositBtn.addEventListener("click", () => {
-      if(playerPoints > 0) {
+      if (playerPoints > 0) {
         pointValue++;
         popupDiv.querySelector<HTMLSpanElement>("#value")!.innerHTML =
           pointValue.toString();
         playerPoints--;
-        if(playerPoints == 0) {
+        if (playerPoints == 0) {
           statusPanel.innerHTML = `No points yet...`;
         } else {
           statusPanel.innerHTML = `${playerPoints} points accumulated`;
