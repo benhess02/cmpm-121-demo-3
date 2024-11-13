@@ -7,7 +7,8 @@ import "./leafletWorkaround.ts";
 
 import luck from "./luck.ts";
 
-import { Board, Coin } from "./board.ts";
+import { Board } from "./board.ts";
+import { Coin } from "./geocache.ts";
 
 // Starting location
 const OAKES_CLASSROOM = leaflet.latLng(36.98949379578401, -122.06277128548504);
@@ -36,7 +37,14 @@ leaflet
 
 const board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
 
-const playerMarker = leaflet.marker(OAKES_CLASSROOM);
+const mapRectangles: leaflet.Rectangle[] = [];
+
+let playerI = Math.floor(OAKES_CLASSROOM.lat / TILE_DEGREES);
+let playerJ = Math.floor(OAKES_CLASSROOM.lng / TILE_DEGREES);
+
+const playerMarker = leaflet.marker(
+  leaflet.latLng(playerI * TILE_DEGREES, playerJ * TILE_DEGREES),
+);
 playerMarker.bindTooltip("You are here!");
 playerMarker.addTo(map);
 
@@ -46,15 +54,18 @@ const statusPanel = document.querySelector<HTMLDivElement>("#statusPanel")!;
 statusPanel.innerHTML = `${playerCoins.length} coins`;
 
 // Add caches to the map by cell numbers
-function spawnCache(x: number, y: number) {
-  const cell = board.getCellForPoint(leaflet.latLng(x, y))!;
+function spawnCache(i: number, j: number) {
+  const cell = board.getCellForPoint(
+    leaflet.latLng(i * TILE_DEGREES, j * TILE_DEGREES),
+  )!;
 
   const rect = leaflet.rectangle(board.getCellBounds(cell));
   rect.addTo(map);
+  mapRectangles.push(rect);
 
   if (cell.coins == null) {
     const pointValue = Math.floor(
-      luck([x, y, "initialValue"].toString()) * 100,
+      luck([i, j, "initialValue"].toString()) * 100,
     );
     cell.coins = [];
     for (let i = 0; i < pointValue; i++) {
@@ -81,6 +92,7 @@ function spawnCache(x: number, y: number) {
         coinItem.remove();
         statusPanel.innerHTML = `${playerCoins.length} coins`;
         addInventoryCoin(coin);
+        board.save();
       });
     }
 
@@ -98,6 +110,7 @@ function spawnCache(x: number, y: number) {
         coinItem.remove();
         statusPanel.innerHTML = `${playerCoins.length} coins`;
         addCacheCoin(coin);
+        board.save();
       });
     }
 
@@ -121,13 +134,58 @@ function spawnCache(x: number, y: number) {
   });
 }
 
-for (let x = -NEIGHBORHOOD_SIZE; x < NEIGHBORHOOD_SIZE; x++) {
-  for (let y = -NEIGHBORHOOD_SIZE; y < NEIGHBORHOOD_SIZE; y++) {
-    if (luck([x, y].toString()) < CACHE_SPAWN_PROBABILITY) {
-      spawnCache(
-        OAKES_CLASSROOM.lat + (x * TILE_DEGREES),
-        OAKES_CLASSROOM.lng + (y * TILE_DEGREES),
-      );
+function regenerate() {
+  board.clear();
+  playerMarker.setLatLng(
+    leaflet.latLng(
+      (playerI + 0.5) * TILE_DEGREES,
+      (playerJ + 0.5) * TILE_DEGREES,
+    ),
+  );
+  while (mapRectangles.length > 0) {
+    mapRectangles.pop()!.removeFrom(map);
+  }
+  for (let x = -NEIGHBORHOOD_SIZE; x < NEIGHBORHOOD_SIZE; x++) {
+    for (let y = -NEIGHBORHOOD_SIZE; y < NEIGHBORHOOD_SIZE; y++) {
+      const lat = playerI + x;
+      const lng = playerJ + y;
+      if (luck([lat, lng].toString()) < CACHE_SPAWN_PROBABILITY) {
+        spawnCache(lat, lng);
+      }
     }
   }
 }
+
+regenerate();
+
+document.querySelector<HTMLButtonElement>("#north")?.addEventListener(
+  "click",
+  () => {
+    playerI += 1;
+    regenerate();
+  },
+);
+
+document.querySelector<HTMLButtonElement>("#south")?.addEventListener(
+  "click",
+  () => {
+    playerI -= 1;
+    regenerate();
+  },
+);
+
+document.querySelector<HTMLButtonElement>("#east")?.addEventListener(
+  "click",
+  () => {
+    playerJ += 1;
+    regenerate();
+  },
+);
+
+document.querySelector<HTMLButtonElement>("#west")?.addEventListener(
+  "click",
+  () => {
+    playerJ -= 1;
+    regenerate();
+  },
+);
