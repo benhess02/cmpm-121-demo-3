@@ -23,8 +23,9 @@ export class Board {
       this.knownCells.set(key, cell);
     }
     const result = this.knownCells.get(key)!;
-    if (this.savedCells.has(key)) {
-      result.fromMomento(this.savedCells.get(key)!);
+    const storedMomento = localStorage.getItem(key);
+    if (storedMomento != null) {
+      result.fromMomento(storedMomento);
     }
     return result;
   }
@@ -63,7 +64,7 @@ export class Board {
   save() {
     this.knownCells.forEach((cell) => {
       const key = [cell.i, cell.j].toString();
-      this.savedCells.set(key, cell.toMomento());
+      localStorage.setItem(key, cell.toMomento());
     });
   }
 

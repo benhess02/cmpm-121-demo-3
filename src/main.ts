@@ -42,14 +42,20 @@ const mapRectangles: leaflet.Rectangle[] = [];
 let playerI = Math.floor(OAKES_CLASSROOM.lat / TILE_DEGREES);
 let playerJ = Math.floor(OAKES_CLASSROOM.lng / TILE_DEGREES);
 
+let geolocationWatch: number = -1;
+
 const playerMarker = leaflet.marker(
   leaflet.latLng(playerI * TILE_DEGREES, playerJ * TILE_DEGREES),
 );
 playerMarker.bindTooltip("You are here!");
 playerMarker.addTo(map);
 
+let playerPath: [number, number][] = [];
+const pathPolyline = leaflet.polyline(playerPath, { color: "blue" });
+pathPolyline.addTo(map);
+
 // Display the player's points
-const playerCoins: Coin[] = [];
+let playerCoins: Coin[] = [];
 const statusPanel = document.querySelector<HTMLDivElement>("#statusPanel")!;
 statusPanel.innerHTML = `${playerCoins.length} coins`;
 
@@ -92,7 +98,7 @@ function spawnCache(i: number, j: number) {
         coinItem.remove();
         statusPanel.innerHTML = `${playerCoins.length} coins`;
         addInventoryCoin(coin);
-        board.save();
+        save();
       });
     }
 
@@ -110,7 +116,7 @@ function spawnCache(i: number, j: number) {
         coinItem.remove();
         statusPanel.innerHTML = `${playerCoins.length} coins`;
         addCacheCoin(coin);
-        board.save();
+        save();
       });
     }
 
@@ -134,6 +140,39 @@ function spawnCache(i: number, j: number) {
   });
 }
 
+function save() {
+  board.save();
+  localStorage.setItem("position", JSON.stringify([playerI, playerJ]));
+  localStorage.setItem("path", JSON.stringify(playerPath));
+  localStorage.setItem("coins", JSON.stringify(playerCoins));
+}
+
+function load() {
+  playerI = Math.floor(OAKES_CLASSROOM.lat / TILE_DEGREES);
+  playerJ = Math.floor(OAKES_CLASSROOM.lng / TILE_DEGREES);
+  playerCoins = [];
+  playerPath = [];
+  const positionStr = localStorage.getItem("position");
+  if (positionStr !== null) {
+    [playerI, playerJ] = JSON.parse(positionStr);
+  }
+  const pathStr = localStorage.getItem("path");
+  if (pathStr !== null) {
+    playerPath = JSON.parse(pathStr);
+  }
+  const coinStr = localStorage.getItem("coins");
+  if (coinStr !== null) {
+    playerCoins = JSON.parse(coinStr);
+  }
+  statusPanel.innerHTML = `${playerCoins.length} coins`;
+  map.setView(leaflet.latLng(
+    (playerI + 0.5) * TILE_DEGREES,
+    (playerJ + 0.5) * TILE_DEGREES,
+  ));
+  disableGeolocationTracking();
+  regenerate();
+}
+
 function regenerate() {
   board.clear();
   playerMarker.setLatLng(
@@ -142,6 +181,11 @@ function regenerate() {
       (playerJ + 0.5) * TILE_DEGREES,
     ),
   );
+  playerPath.push([
+    (playerI + 0.5) * TILE_DEGREES,
+    (playerJ + 0.5) * TILE_DEGREES,
+  ]);
+  pathPolyline.setLatLngs(playerPath);
   while (mapRectangles.length > 0) {
     mapRectangles.pop()!.removeFrom(map);
   }
@@ -156,12 +200,45 @@ function regenerate() {
   }
 }
 
-regenerate();
+load();
+
+function enableGeolocationTracking() {
+  document.querySelector<HTMLButtonElement>("#sensor")!.style.backgroundColor =
+    "#3c3c3c";
+  if (geolocationWatch >= 0) {
+    return;
+  }
+  geolocationWatch = navigator.geolocation.watchPosition((pos) => {
+    const newI = Math.floor(pos.coords.latitude / TILE_DEGREES);
+    const newJ = Math.floor(pos.coords.longitude / TILE_DEGREES);
+    map.setView(leaflet.latLng(
+      (newI + 0.5) * TILE_DEGREES,
+      (newJ + 0.5) * TILE_DEGREES,
+    ));
+    if (playerI != newI || playerJ != newJ) {
+      playerI = newI;
+      playerJ = newJ;
+      save();
+      regenerate();
+    }
+  });
+}
+
+function disableGeolocationTracking() {
+  document.querySelector<HTMLButtonElement>("#sensor")!.style.backgroundColor =
+    "#1a1a1a";
+  if (geolocationWatch >= 0) {
+    navigator.geolocation.clearWatch(geolocationWatch);
+    geolocationWatch = -1;
+  }
+}
 
 document.querySelector<HTMLButtonElement>("#north")?.addEventListener(
   "click",
   () => {
     playerI += 1;
+    disableGeolocationTracking();
+    save();
     regenerate();
   },
 );
@@ -170,6 +247,8 @@ document.querySelector<HTMLButtonElement>("#south")?.addEventListener(
   "click",
   () => {
     playerI -= 1;
+    disableGeolocationTracking();
+    save();
     regenerate();
   },
 );
@@ -178,6 +257,8 @@ document.querySelector<HTMLButtonElement>("#east")?.addEventListener(
   "click",
   () => {
     playerJ += 1;
+    disableGeolocationTracking();
+    save();
     regenerate();
   },
 );
@@ -186,6 +267,32 @@ document.querySelector<HTMLButtonElement>("#west")?.addEventListener(
   "click",
   () => {
     playerJ -= 1;
+    disableGeolocationTracking();
+    save();
     regenerate();
+  },
+);
+
+document.querySelector("#sensor")?.addEventListener(
+  "click",
+  () => {
+    if (geolocationWatch < 0) {
+      enableGeolocationTracking();
+    } else {
+      disableGeolocationTracking();
+    }
+  },
+);
+
+document.querySelector("#reset")?.addEventListener(
+  "click",
+  () => {
+    const response = prompt(
+      "Are you sure you want to delete ALL saved data? [Y/N]",
+    )?.toUpperCase();
+    if (response == "Y" || response == "YES") {
+      localStorage.clear();
+      load();
+    }
   },
 );
