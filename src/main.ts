@@ -9,6 +9,7 @@ import luck from "./luck.ts";
 
 import { Board } from "./board.ts";
 import { Coin } from "./geocache.ts";
+import { GameState } from "./gameState.ts";
 
 // Starting location
 const OAKES_CLASSROOM = leaflet.latLng(36.98949379578401, -122.06277128548504);
@@ -39,13 +40,18 @@ const board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
 
 const mapRectangles: leaflet.Rectangle[] = [];
 
-let playerI = Math.floor(OAKES_CLASSROOM.lat / TILE_DEGREES);
-let playerJ = Math.floor(OAKES_CLASSROOM.lng / TILE_DEGREES);
+let gameState = new GameState(
+  Math.floor(OAKES_CLASSROOM.lat / TILE_DEGREES),
+  Math.floor(OAKES_CLASSROOM.lng / TILE_DEGREES)
+);
 
 let geolocationWatch: number = -1;
 
 const playerMarker = leaflet.marker(
-  leaflet.latLng(playerI * TILE_DEGREES, playerJ * TILE_DEGREES),
+  leaflet.latLng(
+    gameState.getPlayerLocation()[0] * TILE_DEGREES,
+    gameState.getPlayerLocation()[1] * TILE_DEGREES
+  ),
 );
 playerMarker.bindTooltip("You are here!");
 playerMarker.addTo(map);
@@ -55,9 +61,8 @@ const pathPolyline = leaflet.polyline(playerPath, { color: "blue" });
 pathPolyline.addTo(map);
 
 // Display the player's points
-let playerCoins: Coin[] = [];
 const statusPanel = document.querySelector<HTMLDivElement>("#statusPanel")!;
-statusPanel.innerHTML = `${playerCoins.length} coins`;
+statusPanel.innerHTML = `${gameState.getCoinCount()} coins`;
 
 // Add caches to the map by cell numbers
 function spawnCache(i: number, j: number) {
@@ -94,9 +99,9 @@ function spawnCache(i: number, j: number) {
       collectBtn.addEventListener("click", () => {
         console.log(`Collecting ${coin.i}:${coin.j}#${coin.serial}`);
         cell.coins!.splice(cell.coins!.indexOf(coin), 1);
-        playerCoins.push(coin);
+        gameState.addCoin(coin);
         coinItem.remove();
-        statusPanel.innerHTML = `${playerCoins.length} coins`;
+        statusPanel.innerHTML = `${gameState.getCoinCount()} coins`;
         addInventoryCoin(coin);
         save();
       });
@@ -111,10 +116,10 @@ function spawnCache(i: number, j: number) {
       depositBtn.innerHTML = "Deposit";
       depositBtn.addEventListener("click", () => {
         console.log(`Depositing ${coin.i}:${coin.j}#${coin.serial}`);
-        playerCoins.splice(playerCoins.indexOf(coin), 1);
+        gameState.removeCoin(coin);
         cell.coins!.push(coin);
         coinItem.remove();
-        statusPanel.innerHTML = `${playerCoins.length} coins`;
+        statusPanel.innerHTML = `${gameState.getCoinCount()} coins`;
         addCacheCoin(coin);
         save();
       });
@@ -131,7 +136,7 @@ function spawnCache(i: number, j: number) {
     const inventoryList = document.createElement("ul");
     inventoryList.style.overflow = "scroll";
     inventoryList.style.maxHeight = "200px";
-    playerCoins.forEach((coin) => {
+    gameState.getCoins().forEach((coin) => {
       addInventoryCoin(coin);
     });
     popupDiv.append(inventoryList);
@@ -142,19 +147,21 @@ function spawnCache(i: number, j: number) {
 
 function save() {
   board.save();
-  localStorage.setItem("position", JSON.stringify([playerI, playerJ]));
+  localStorage.setItem("position", JSON.stringify(gameState.getPlayerLocation()));
   localStorage.setItem("path", JSON.stringify(playerPath));
-  localStorage.setItem("coins", JSON.stringify(playerCoins));
+  localStorage.setItem("coins", JSON.stringify(gameState.getCoins()));
 }
 
 function load() {
-  playerI = Math.floor(OAKES_CLASSROOM.lat / TILE_DEGREES);
-  playerJ = Math.floor(OAKES_CLASSROOM.lng / TILE_DEGREES);
-  playerCoins = [];
+  gameState = new GameState(
+    Math.floor(OAKES_CLASSROOM.lat / TILE_DEGREES),
+    Math.floor(OAKES_CLASSROOM.lng / TILE_DEGREES)
+  );
   playerPath = [];
   const positionStr = localStorage.getItem("position");
   if (positionStr !== null) {
-    [playerI, playerJ] = JSON.parse(positionStr);
+    const [newPlayerI, newPlayerJ] = JSON.parse(positionStr);
+    gameState.setPlayerPosition(newPlayerI, newPlayerJ);
   }
   const pathStr = localStorage.getItem("path");
   if (pathStr !== null) {
@@ -162,12 +169,13 @@ function load() {
   }
   const coinStr = localStorage.getItem("coins");
   if (coinStr !== null) {
-    playerCoins = JSON.parse(coinStr);
+    const playerCoins: Coin[] = JSON.parse(coinStr);
+    playerCoins.forEach(c => gameState.addCoin(c));
   }
-  statusPanel.innerHTML = `${playerCoins.length} coins`;
+  statusPanel.innerHTML = `${gameState.getCoinCount()} coins`;
   map.setView(leaflet.latLng(
-    (playerI + 0.5) * TILE_DEGREES,
-    (playerJ + 0.5) * TILE_DEGREES,
+    (gameState.getPlayerLocation()[0] + 0.5) * TILE_DEGREES,
+    (gameState.getPlayerLocation()[1] + 0.5) * TILE_DEGREES,
   ));
   disableGeolocationTracking();
   regenerate();
@@ -177,13 +185,13 @@ function regenerate() {
   board.clear();
   playerMarker.setLatLng(
     leaflet.latLng(
-      (playerI + 0.5) * TILE_DEGREES,
-      (playerJ + 0.5) * TILE_DEGREES,
+      (gameState.getPlayerLocation()[0] + 0.5) * TILE_DEGREES,
+      (gameState.getPlayerLocation()[1] + 0.5) * TILE_DEGREES,
     ),
   );
   playerPath.push([
-    (playerI + 0.5) * TILE_DEGREES,
-    (playerJ + 0.5) * TILE_DEGREES,
+    (gameState.getPlayerLocation()[0] + 0.5) * TILE_DEGREES,
+    (gameState.getPlayerLocation()[1] + 0.5) * TILE_DEGREES,
   ]);
   pathPolyline.setLatLngs(playerPath);
   while (mapRectangles.length > 0) {
@@ -191,8 +199,8 @@ function regenerate() {
   }
   for (let x = -NEIGHBORHOOD_SIZE; x < NEIGHBORHOOD_SIZE; x++) {
     for (let y = -NEIGHBORHOOD_SIZE; y < NEIGHBORHOOD_SIZE; y++) {
-      const lat = playerI + x;
-      const lng = playerJ + y;
+      const lat = gameState.getPlayerLocation()[0] + x;
+      const lng = gameState.getPlayerLocation()[1] + y;
       if (luck([lat, lng].toString()) < CACHE_SPAWN_PROBABILITY) {
         spawnCache(lat, lng);
       }
@@ -215,9 +223,8 @@ function enableGeolocationTracking() {
       (newI + 0.5) * TILE_DEGREES,
       (newJ + 0.5) * TILE_DEGREES,
     ));
-    if (playerI != newI || playerJ != newJ) {
-      playerI = newI;
-      playerJ = newJ;
+    if (gameState.getPlayerLocation()[0] != newI || gameState.getPlayerLocation()[1] != newJ) {
+      gameState.setPlayerPosition(newI, newJ);
       save();
       regenerate();
     }
@@ -236,7 +243,7 @@ function disableGeolocationTracking() {
 document.querySelector<HTMLButtonElement>("#north")?.addEventListener(
   "click",
   () => {
-    playerI += 1;
+    gameState.movePlayer(1, 0);
     disableGeolocationTracking();
     save();
     regenerate();
@@ -246,7 +253,7 @@ document.querySelector<HTMLButtonElement>("#north")?.addEventListener(
 document.querySelector<HTMLButtonElement>("#south")?.addEventListener(
   "click",
   () => {
-    playerI -= 1;
+    gameState.movePlayer(-1, 0);
     disableGeolocationTracking();
     save();
     regenerate();
@@ -256,7 +263,7 @@ document.querySelector<HTMLButtonElement>("#south")?.addEventListener(
 document.querySelector<HTMLButtonElement>("#east")?.addEventListener(
   "click",
   () => {
-    playerJ += 1;
+    gameState.movePlayer(0, 1);
     disableGeolocationTracking();
     save();
     regenerate();
@@ -266,7 +273,7 @@ document.querySelector<HTMLButtonElement>("#east")?.addEventListener(
 document.querySelector<HTMLButtonElement>("#west")?.addEventListener(
   "click",
   () => {
-    playerJ -= 1;
+    gameState.movePlayer(0, -1);
     disableGeolocationTracking();
     save();
     regenerate();
