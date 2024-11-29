@@ -42,7 +42,7 @@ const mapRectangles: leaflet.Rectangle[] = [];
 
 let gameState = new GameState(
   Math.floor(OAKES_CLASSROOM.lat / TILE_DEGREES),
-  Math.floor(OAKES_CLASSROOM.lng / TILE_DEGREES)
+  Math.floor(OAKES_CLASSROOM.lng / TILE_DEGREES),
 );
 
 let geolocationWatch: number = -1;
@@ -50,7 +50,7 @@ let geolocationWatch: number = -1;
 const playerMarker = leaflet.marker(
   leaflet.latLng(
     gameState.getPlayerLocation()[0] * TILE_DEGREES,
-    gameState.getPlayerLocation()[1] * TILE_DEGREES
+    gameState.getPlayerLocation()[1] * TILE_DEGREES,
   ),
 );
 playerMarker.bindTooltip("You are here!");
@@ -147,7 +147,10 @@ function spawnCache(i: number, j: number) {
 
 function save() {
   board.save();
-  localStorage.setItem("position", JSON.stringify(gameState.getPlayerLocation()));
+  localStorage.setItem(
+    "position",
+    JSON.stringify(gameState.getPlayerLocation()),
+  );
   localStorage.setItem("path", JSON.stringify(playerPath));
   localStorage.setItem("coins", JSON.stringify(gameState.getCoins()));
 }
@@ -155,7 +158,7 @@ function save() {
 function load() {
   gameState = new GameState(
     Math.floor(OAKES_CLASSROOM.lat / TILE_DEGREES),
-    Math.floor(OAKES_CLASSROOM.lng / TILE_DEGREES)
+    Math.floor(OAKES_CLASSROOM.lng / TILE_DEGREES),
   );
   playerPath = [];
   const positionStr = localStorage.getItem("position");
@@ -170,7 +173,7 @@ function load() {
   const coinStr = localStorage.getItem("coins");
   if (coinStr !== null) {
     const playerCoins: Coin[] = JSON.parse(coinStr);
-    playerCoins.forEach(c => gameState.addCoin(c));
+    playerCoins.forEach((c) => gameState.addCoin(c));
   }
   statusPanel.innerHTML = `${gameState.getCoinCount()} coins`;
   map.setView(leaflet.latLng(
@@ -223,7 +226,10 @@ function enableGeolocationTracking() {
       (newI + 0.5) * TILE_DEGREES,
       (newJ + 0.5) * TILE_DEGREES,
     ));
-    if (gameState.getPlayerLocation()[0] != newI || gameState.getPlayerLocation()[1] != newJ) {
+    if (
+      gameState.getPlayerLocation()[0] != newI ||
+      gameState.getPlayerLocation()[1] != newJ
+    ) {
       gameState.setPlayerPosition(newI, newJ);
       save();
       regenerate();
